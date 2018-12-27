@@ -141,11 +141,6 @@ def visualizer_rllib(args):
     if args.evaluate:
         env_params.evaluate = True
 
-    # lower the horizon if testing
-    if args.horizon:
-        config['horizon'] = 6000  #可以考虑改成6000
-        env_params.horizon = 6000
-
     # create the agent that will be used to compute the actions
     agent = agent_cls(env=env_name, config=config)
     checkpoint = result_dir + '/checkpoint_' + args.checkpoint_num
@@ -155,70 +150,26 @@ def visualizer_rllib(args):
     env = ModelCatalog.get_preprocessor_as_wrapper(env_class(
         env_params=env_params, sumo_params=sumo_params, scenario=scenario))
 
-    if multiagent:
-        rets = {}
-        # map the agent id to its policy
-        policy_map_fn = config['multiagent']['policy_mapping_fn'].func
-        for key in config['multiagent']['policy_graphs'].keys():
-            rets[key] = []
-    else:
-        rets = []
-    final_outflows = []
-    mean_speed = []
-    for i in range(1):#args.num_rollouts):
-        vel = []
-        state = env.reset()
-        done = False
-        if multiagent:
-            ret = {key: [0] for key in rets.keys()}
-        else:
-            ret = 0
-        for _ in range(env_params.horizon):
-            vehicles = env.unwrapped.vehicles
-            vel.append(vehicles.get_speed(vehicles.get_ids())[0])#这里是整体平均速度
-            if multiagent:
-                action = {}
-                for agent_id in state.keys():
-                    action[agent_id] = agent.compute_action(
-                        state[agent_id], policy_id=policy_map_fn(agent_id))
-            else:
-                print(type(state),state)
-                action = agent.compute_action(state)
-                print(type(action),action)
-            state, reward, done, _ = env.step(action)
-            if multiagent:
-                for actor, rew in reward.items():
-                    ret[policy_map_fn(actor)][0] += rew
-            else:
-                ret += reward
-            if multiagent and done['__all__']:
-                break
-            if not multiagent and done:
-                break
-
-        if multiagent:
-            for key in rets.keys():
-                rets[key].append(ret[key])
-        else:
-            rets.append(ret)
-        outflow = vehicles.get_outflow_rate(500)
-        final_outflows.append(outflow)
-        #mean_speed.append(np.mean(vel))#注意这里
-        print('Round {}, Return: {}'.format(i, ret))
-    if multiagent:
-        for agent_id, rew in rets.items():
-            print('Average, std return: {}, {} for agent {}'.format(
-                np.mean(rew), np.std(rew), agent_id))
-    else:
-        print('Average, std return: {}, {}'.format(
-            np.mean(rets), np.std(rets)))
-    print('Average, std speed: {}, {}'.format(
-        np.mean(mean_speed), np.std(mean_speed)))
-    print('Average, std outflow: {}, {}'.format(
-        np.mean(final_outflows), np.std(final_outflows)))
     import matplotlib.pyplot as plt
-    plt.figure()
-    plt.plot(vel)
+    from matplotlib import cm
+    from matplotlib.ticker import LinearLocator, FormatStrFormatter
+    fig = plt.figure()
+    h = np.linspace(0, 60, 100)
+    Deltav = np.linspace(-6, 12, 100)
+    Headway, DELTAV = np.meshgrid(h, Deltav)
+    # fix v=20m/s
+    xn, yn = Headway.shape
+    geta = np.array(Headway)
+    for xk in range(xn):
+        for yk in range(yn):
+            #输入状态
+            #Headway[xk,yk]
+            #DELTAV[xk,yk]
+            geta[xk, yk] = agent.compute_action(np.array([3.8/30,DELTAV[xk,yk]/30,Headway[xk,yk]/260]))
+    surf = plt.contourf(DELTAV, Headway, geta, 20, cmap=cm.coolwarm)
+    plt.colorbar()
+    #C = plt.contour(DELTAV, Headway, geta, 20, colors='black')
+    # plt.clabel(C, inline = True, fontsize = 10)
     plt.show()
     # terminate the environment
     env.unwrapped.terminate()

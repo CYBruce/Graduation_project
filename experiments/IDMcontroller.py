@@ -22,7 +22,6 @@ def IDM(deltav,headway,v):#headway, velocity, delta_velocity(v-v_lead)
 
 
 #visulization
-%matplotlib inline
 from mpl_toolkits.mplot3d import axes3d
 import matplotlib.pyplot as plt
 from matplotlib import cm
